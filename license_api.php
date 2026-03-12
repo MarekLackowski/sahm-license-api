@@ -2,11 +2,11 @@
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: text/plain");
 
-// Twoje dane z InfinityFree (na razie zostawiamy, później zmienimy)
-$db_host = 'sql212.infinityfree.com';
-$db_name = 'if0_41369948_sahm_licenses';
-$db_user = 'if0_41369948';
-$db_pass = 'atOkJ8ZGUy';
+// Pobierz dane ze zmiennych środowiskowych (ustawionych w Render)
+$db_host = getenv('DB_HOST');
+$db_name = getenv('DB_NAME');
+$db_user = getenv('DB_USER');
+$db_pass = getenv('DB_PASS');
 
 try {
     $pdo = new PDO("mysql:host=$db_host;dbname=$db_name;charset=utf8mb4", $db_user, $db_pass);
@@ -44,4 +44,5 @@ if ($license['used'] == 0) {
         die("USED");
     }
 }
+
 ?>
