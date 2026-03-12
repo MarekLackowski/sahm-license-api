@@ -2,18 +2,10 @@
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: text/plain");
 
-// Pobierz dane ze zmiennych środowiskowych (ustawionych w Render)
-$db_host = getenv('DB_HOST');
-$db_name = getenv('DB_NAME');
-$db_user = getenv('DB_USER');
-$db_pass = getenv('DB_PASS');
-
-try {
-    $pdo = new PDO("mysql:host=$db_host;dbname=$db_name;charset=utf8mb4", $db_user, $db_pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch (PDOException $e) {
-    die("DB_ERROR");
-}
+// 🔴 TWOJE DANE
+$gistId = "541cefcb68e9e3d5204ba9ba3a8ca350"; // ID z URL (to po gist.githubusercontent.com/.../)
+$filename = "licenses.json";
+$token = getenv('GITHUB_TOKEN');
 
 $key = isset($_GET['key']) ? $_GET['key'] : '';
 $hwid = isset($_GET['hwid']) ? $_GET['hwid'] : '';
@@ -22,27 +14,68 @@ if (empty($key)) {
     die("NO_KEY");
 }
 
-// Sprawdź czy klucz istnieje
-$stmt = $pdo->prepare("SELECT * FROM licenses WHERE license_key = ?");
-$stmt->execute([$key]);
-$license = $stmt->fetch(PDO::FETCH_ASSOC);
+// Pobierz aktualną zawartość Gista przez API
+$ch = curl_init("https://api.github.com/gists/$gistId");
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_USERAGENT, "PHP-Script");
+curl_setopt($ch, CURLOPT_HTTPHEADER, [
+    "Authorization: token $token",
+    "Accept: application/vnd.github.v3+json"
+]);
+$response = curl_exec($ch);
+$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
 
-if (!$license) {
+if ($httpCode != 200) {
+    die("GIST_ERROR");
+}
+
+$gistData = json_decode($response, true);
+$currentContent = $gistData['files'][$filename]['content'];
+$licenses = json_decode($currentContent, true);
+
+// Sprawdź klucz
+if (!isset($licenses[$key])) {
     die("INVALID");
 }
 
-if ($license['used'] == 0) {
-    // Klucz nieużywany - aktywuj
-    $stmt = $pdo->prepare("UPDATE licenses SET used = 1, machine_id = ?, activated_at = NOW() WHERE license_key = ?");
-    $stmt->execute([$hwid, $key]);
+$license = $licenses[$key];
+
+if (!$license['used']) {
+    // Aktywuj – zmień dane
+    $licenses[$key]['used'] = true;
+    $licenses[$key]['machine_id'] = $hwid;
+    
+    // Zapisz z powrotem do Gista
+    $newContent = json_encode($licenses, JSON_PRETTY_PRINT);
+    
+    $updateData = json_encode([
+        "files" => [
+            $filename => [
+                "content" => $newContent
+            ]
+        ]
+    ]);
+    
+    $ch = curl_init("https://api.github.com/gists/$gistId");
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PATCH");
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $updateData);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_USERAGENT, "PHP-Script");
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        "Authorization: token $token",
+        "Accept: application/vnd.github.v3+json",
+        "Content-Type: application/json"
+    ]);
+    curl_exec($ch);
+    curl_close($ch);
+    
     die("ACTIVATED");
 } else {
-    // Klucz już używany - sprawdź czy ten sam komputer
     if ($license['machine_id'] == $hwid) {
         die("VALID");
     } else {
         die("USED");
     }
 }
-
 ?>
