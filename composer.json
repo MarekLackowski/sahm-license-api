@@ -1,0 +1,6 @@
+{
+    "name": "sahm/license-api",
+    "description": "License verification API for SAHM",
+    "type": "project",
+    "require": {}
+}
